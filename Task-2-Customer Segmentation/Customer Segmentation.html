@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Customer Segmentation Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: rgba(255,255,255,0.07);
+    --c1: #a78bfa;   /* Champions - purple */
+    --c2: #34d399;   /* Loyal - green */
+    --c3: #60a5fa;   /* At Risk - blue */
+    --c4: #fb923c;   /* New - orange */
+    --c5: #f43f5e;   /* Churned - red */
+    --text: #f1f5f9;
+    --muted: #64748b;
+    --card-radius: 16px;
+  }
+
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+  .layout { display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px; flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 24px 16px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--c1); letter-spacing: -0.5px; margin-bottom: 32px; display: flex; align-items: center; gap: 8px; }
+  .logo span { color: var(--text); }
+  .nav-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; margin-top: 20px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.2s; margin-bottom: 2px; }
+  .nav-item:hover, .nav-item.active { background: rgba(167,139,250,0.08); color: var(--c1); }
+  .nav-icon { font-size: 16px; }
+  .sidebar-footer { margin-top: auto; }
+  .upload-btn { width: 100%; padding: 10px; border-radius: 10px; border: 1px dashed rgba(167,139,250,0.3); background: rgba(167,139,250,0.04); color: var(--c1); font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .upload-btn:hover { background: rgba(167,139,250,0.1); border-color: var(--c1); }
+
+  /* MAIN */
+  .main { flex: 1; padding: 28px 28px 40px; overflow-x: hidden; }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+  .page-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; outline: none; transition: border-color 0.2s; }
+  select:hover { border-color: var(--c1); }
+
+  /* SEGMENT SLICERS */
+  .slicer-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .slicer-btn { padding: 6px 16px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+  .slicer-btn:hover { border-color: var(--c1); color: var(--c1); }
+  .slicer-btn.active { font-weight: 500; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* KPI CARDS */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 14px; margin-bottom: 22px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 18px; position: relative; overflow: hidden; transition: transform 0.2s, border-color 0.2s; }
+  .kpi-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.15); }
+  .kpi-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 16px 16px 0 0; }
+  .kpi-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; margin-bottom: 12px; }
+  .kpi-label { font-size: 10px; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; }
+  .kpi-value { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  /* CHARTS */
+  .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .charts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .charts-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 20px; }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .chart-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; }
+  .chart-tag { font-size: 10px; padding: 3px 9px; border-radius: 99px; background: rgba(167,139,250,0.1); color: var(--c1); letter-spacing: 0.05em; }
+  canvas { max-width: 100%; }
+
+  /* SEGMENT CARDS */
+  .seg-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 22px; }
+  .seg-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 16px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .seg-card:hover { transform: translateY(-2px); }
+  .seg-card.selected { border-width: 1.5px; }
+  .seg-emoji { font-size: 24px; margin-bottom: 8px; }
+  .seg-name { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .seg-count { font-size: 20px; font-weight: 700; font-family: 'Syne', sans-serif; }
+  .seg-pct { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* TABLE */
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); overflow: hidden; margin-bottom: 16px; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
+  .table-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; }
+  .search-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px; width: 200px; outline: none; }
+  .search-box:focus { border-color: var(--c1); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 10px 16px; text-align: left; font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--surface2); cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover { color: var(--c1); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 10px 16px; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 500; }
+  .rfm-bar-wrap { display: flex; align-items: center; gap: 4px; }
+  .rfm-pip { width: 8px; height: 8px; border-radius: 2px; }
+
+  #file-input { display: none; }
+
+  @media (max-width: 1100px) { .seg-cards { grid-template-columns: repeat(3,1fr); } .charts-grid-3 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 900px) { .sidebar { display: none; } .charts-grid, .charts-grid-2 { grid-template-columns: 1fr; } .seg-cards { grid-template-columns: repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">◈ <span>SegmentIQ</span></div>
+    <div class="nav-label">Analysis</div>
+    <div class="nav-item active"><span class="nav-icon">▦</span> Segments</div>
+    <div class="nav-item"><span class="nav-icon">⊕</span> RFM Scores</div>
+    <div class="nav-item"><span class="nav-icon">↗</span> Behavior</div>
+    <div class="nav-label">Insights</div>
+    <div class="nav-item"><span class="nav-icon">◷</span> Trends</div>
+    <div class="nav-item"><span class="nav-icon">≋</span> Demographics</div>
+    <div class="nav-item"><span class="nav-icon">◈</span> Preferences</div>
+    <div class="sidebar-footer">
+      <div class="nav-label">Data</div>
+      <button class="upload-btn" onclick="document.getElementById('file-input').click()">↑ Import CSV / Excel</button>
+      <input type="file" id="file-input" accept=".csv" onchange="handleFileUpload(event)" />
+      <div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center;">or use sample data</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <div class="topbar">
+      <div>
+        <div class="page-title">Customer Segmentation</div>
+        <div class="page-sub" id="data-source-label">Showing: Sample dataset — 200 customers (K-Means RFM Clustering)</div>
+      </div>
+      <div class="filters">
+        <select id="gender-filter" onchange="applyFilters()">
+          <option value="all">All Genders</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+        <select id="age-filter" onchange="applyFilters()">
+          <option value="all">All Ages</option>
+          <option value="18-25">18–25</option>
+          <option value="26-35">26–35</option>
+          <option value="36-50">36–50</option>
+          <option value="51+">51+</option>
+        </select>
+        <select id="region-filter" onchange="applyFilters()">
+          <option value="all">All Regions</option>
+          <option value="North">North</option>
+          <option value="South">South</option>
+          <option value="East">East</option>
+          <option value="West">West</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- SEGMENT SLICERS -->
+    <div class="slicer-row" id="seg-slicers">
+      <button class="slicer-btn active" style="border-color:rgba(255,255,255,0.2);color:var(--text)" onclick="setSlicer('all',this)"><div class="dot" style="background:#94a3b8"></div>All Segments</button>
+      <button class="slicer-btn" onclick="setSlicer('Champions',this)"><div class="dot" style="background:var(--c1)"></div>Champions</button>
+      <button class="slicer-btn" onclick="setSlicer('Loyal',this)"><div class="dot" style="background:var(--c2)"></div>Loyal</button>
+      <button class="slicer-btn" onclick="setSlicer('At Risk',this)"><div class="dot" style="background:var(--c3)"></div>At Risk</button>
+      <button class="slicer-btn" onclick="setSlicer('New',this)"><div class="dot" style="background:var(--c4)"></div>New</button>
+      <button class="slicer-btn" onclick="setSlicer('Churned',this)"><div class="dot" style="background:var(--c5)"></div>Churned</button>
+    </div>
+
+    <!-- SEGMENT OVERVIEW CARDS -->
+    <div class="seg-cards" id="seg-cards"></div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--c1)"></div>
+        <div class="kpi-icon" style="background:rgba(167,139,250,0.1)">👥</div>
+        <div class="kpi-label">Total Customers</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-sub" id="kpi-total-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--c2)"></div>
+        <div class="kpi-icon" style="background:rgba(52,211,153,0.1)">💰</div>
+        <div class="kpi-label">Avg Lifetime Value</div>
+        <div class="kpi-value" id="kpi-ltv">—</div>
+        <div class="kpi-sub" id="kpi-ltv-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--c3)"></div>
+        <div class="kpi-icon" style="background:rgba(96,165,250,0.1)">🔁</div>
+        <div class="kpi-label">Avg Purchase Frequency</div>
+        <div class="kpi-value" id="kpi-freq">—</div>
+        <div class="kpi-sub" id="kpi-freq-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--c4)"></div>
+        <div class="kpi-icon" style="background:rgba(251,146,60,0.1)">📅</div>
+        <div class="kpi-label">Avg Days Since Purchase</div>
+        <div class="kpi-value" id="kpi-recency">—</div>
+        <div class="kpi-sub" id="kpi-recency-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--c5)"></div>
+        <div class="kpi-icon" style="background:rgba(244,63,94,0.1)">⚠️</div>
+        <div class="kpi-label">Churn Risk Customers</div>
+        <div class="kpi-value" id="kpi-churn">—</div>
+        <div class="kpi-sub" id="kpi-churn-sub"></div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 1 -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Customer Distribution by Segment</div>
+          <span class="chart-tag">BAR</span>
+        </div>
+        <canvas id="segBarChart" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Segment Share</div>
+          <span class="chart-tag">DONUT</span>
+        </div>
+        <canvas id="segDonutChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 2 -->
+    <div class="charts-grid-2">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Avg Spend by Segment</div>
+          <span class="chart-tag">HORIZONTAL BAR</span>
+        </div>
+        <canvas id="spendChart" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Purchase Frequency by Segment</div>
+          <span class="chart-tag">RADAR</span>
+        </div>
+        <canvas id="radarChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 3 -->
+    <div class="charts-grid-2">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Age Group Distribution</div>
+          <span class="chart-tag">BAR</span>
+        </div>
+        <canvas id="ageChart" height="180"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Top Purchase Categories</div>
+          <span class="chart-tag">DONUT</span>
+        </div>
+        <canvas id="catChart" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- CUSTOMER TABLE -->
+    <div class="table-card">
+      <div class="table-header">
+        <div class="table-title">Customer Records</div>
+        <input class="search-box" id="search-box" placeholder="🔍  Search name, region…" oninput="renderTable()" />
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortTable('id')">ID ↕</th>
+              <th onclick="sortTable('name')">Name ↕</th>
+              <th onclick="sortTable('segment')">Segment ↕</th>
+              <th onclick="sortTable('age')">Age ↕</th>
+              <th onclick="sortTable('gender')">Gender</th>
+              <th onclick="sortTable('region')">Region ↕</th>
+              <th onclick="sortTable('ltv')">Lifetime Value ↕</th>
+              <th onclick="sortTable('frequency')">Frequency ↕</th>
+              <th onclick="sortTable('recency')">Recency (days) ↕</th>
+              <th>RFM Score</th>
+              <th onclick="sortTable('category')">Pref. Category</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div style="padding:12px 20px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);" id="table-footer"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── CONFIG ──
+const SEGMENTS = ['Champions','Loyal','At Risk','New','Churned'];
+const SEG_COLORS = { Champions:'#a78bfa', Loyal:'#34d399', 'At Risk':'#60a5fa', New:'#fb923c', Churned:'#f43f5e' };
+const SEG_EMOJI = { Champions:'🏆', Loyal:'💚', 'At Risk':'⚡', New:'🌱', Churned:'❌' };
+const SEG_DESC = {
+  Champions: 'High R, F & M — your best customers',
+  Loyal: 'Buy often, good spend',
+  'At Risk': 'Were good, now inactive',
+  New: 'Recently acquired',
+  Churned: 'Long inactive, low spend'
+};
+
+const FIRST = ['Aarav','Priya','Rahul','Sneha','Vikram','Meena','Arjun','Divya','Rohan','Ananya','Karan','Nisha','Siddharth','Pooja','Amit','Riya','Kunal','Simran','Aditya','Kavya','Manish','Deepa','Ravi','Shruti','Nikhil','Anjali','Suresh','Pallavi','Rohit','Sakshi'];
+const LAST = ['Sharma','Patel','Iyer','Reddy','Kumar','Singh','Nair','Gupta','Joshi','Mehta','Das','Chopra','Rao','Verma','Bose'];
+const REGIONS = ['North','South','East','West'];
+const CATEGORIES = ['Electronics','Clothing','Groceries','Beauty','Sports','Home Decor','Books'];
+const GENDERS = ['Male','Female'];
+const AGE_GROUPS = ['18-25','26-35','36-50','51+'];
+
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function randName(){ return pick(FIRST)+' '+pick(LAST); }
+
+// Assign RFM based on segment
+function rfmForSegment(seg) {
+  if(seg==='Champions')  return { r:randInt(1,15),  f:randInt(12,24), m:randInt(8000,20000) };
+  if(seg==='Loyal')      return { r:randInt(10,30), f:randInt(7,14),  m:randInt(4000,10000) };
+  if(seg==='At Risk')    return { r:randInt(60,120), f:randInt(4,10), m:randInt(2000,7000) };
+  if(seg==='New')        return { r:randInt(1,20),   f:randInt(1,3),  m:randInt(500,2500) };
+  if(seg==='Churned')    return { r:randInt(180,365),f:randInt(1,3),  m:randInt(200,1500) };
+}
+
+function generateData(n=200) {
+  const rows = [];
+  // Weighted distribution: Champions 15%, Loyal 25%, At Risk 20%, New 20%, Churned 20%
+  const weights = [0.15,0.25,0.20,0.20,0.20];
+  for(let i=0;i<n;i++){
+    const rand = Math.random();
+    let cum=0, seg='New';
+    for(let j=0;j<SEGMENTS.length;j++){ cum+=weights[j]; if(rand<cum){ seg=SEGMENTS[j]; break; } }
+    const rfm = rfmForSegment(seg);
+    const ageGroup = pick(AGE_GROUPS);
+    rows.push({
+      id: 'C'+String(1000+i),
+      name: randName(),
+      segment: seg,
+      gender: pick(GENDERS),
+      age: ageGroup,
+      region: pick(REGIONS),
+      ltv: rfm.m,
+      frequency: rfm.f,
+      recency: rfm.r,
+      category: pick(CATEGORIES),
+      rfmR: rfm.r <= 15 ? 5 : rfm.r<=30 ? 4 : rfm.r<=60 ? 3 : rfm.r<=120 ? 2 : 1,
+      rfmF: rfm.f >= 20 ? 5 : rfm.f>=12 ? 4 : rfm.f>=7 ? 3 : rfm.f>=3 ? 2 : 1,
+      rfmM: rfm.m >= 15000 ? 5 : rfm.m>=7000 ? 4 : rfm.m>=3000 ? 3 : rfm.m>=1000 ? 2 : 1,
+    });
+  }
+  return rows;
+}
+
+let rawData = generateData(200);
+let filteredData = [...rawData];
+let activeSeg = 'all';
+let sortKey = 'ltv';
+let sortAsc = false;
+
+let charts = {};
+
+Chart.defaults.color = '#f1f5f9';
+Chart.defaults.font.family = 'DM Sans';
+Chart.defaults.font.size = 11;
+
+// ── FILTERS ──
+function applyFilters() {
+  const gender = document.getElementById('gender-filter').value;
+  const age = document.getElementById('age-filter').value;
+  const region = document.getElementById('region-filter').value;
+
+  filteredData = rawData.filter(r => {
+    if(activeSeg !== 'all' && r.segment !== activeSeg) return false;
+    if(gender !== 'all' && r.gender !== gender) return false;
+    if(age !== 'all' && r.age !== age) return false;
+    if(region !== 'all' && r.region !== region) return false;
+    return true;
+  });
+  updateAll();
+}
+
+function setSlicer(val, btn) {
+  activeSeg = val;
+  document.querySelectorAll('.slicer-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+// ── SEGMENT CARDS ──
+function updateSegCards() {
+  const container = document.getElementById('seg-cards');
+  const total = filteredData.length || 1;
+  container.innerHTML = SEGMENTS.map(seg => {
+    const count = filteredData.filter(r=>r.segment===seg).length;
+    const pct = Math.round(count/total*100);
+    const col = SEG_COLORS[seg];
+    const isSelected = activeSeg === seg;
+    return `<div class="seg-card ${isSelected?'selected':''}" style="${isSelected?`border-color:${col};background:rgba(${hexToRgb(col)},0.06)`:''}" onclick="selectSegCard('${seg}',this)">
+      <div class="seg-emoji">${SEG_EMOJI[seg]}</div>
+      <div class="seg-name" style="color:${col}">${seg}</div>
+      <div class="seg-count" style="color:${col}">${count}</div>
+      <div class="seg-pct">${pct}% of total</div>
+    </div>`;
+  }).join('');
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `${r},${g},${b}`;
+}
+
+function selectSegCard(seg, el) {
+  if(activeSeg===seg){ activeSeg='all'; }
+  else { activeSeg=seg; }
+  document.querySelectorAll('.slicer-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.slicer-btn').classList.add('active');
+  applyFilters();
+}
+
+// ── KPIs ──
+function updateKPIs() {
+  const d = filteredData;
+  const n = d.length || 1;
+  const avgLtv = Math.round(d.reduce((s,r)=>s+r.ltv,0)/n);
+  const avgFreq = (d.reduce((s,r)=>s+r.frequency,0)/n).toFixed(1);
+  const avgRec = Math.round(d.reduce((s,r)=>s+r.recency,0)/n);
+  const churnCount = d.filter(r=>r.segment==='Churned'||r.segment==='At Risk').length;
+
+  document.getElementById('kpi-total').textContent = n.toLocaleString();
+  document.getElementById('kpi-total-sub').textContent = activeSeg==='all'?'across all segments':`in ${activeSeg} segment`;
+  document.getElementById('kpi-ltv').textContent = '$'+avgLtv.toLocaleString();
+  document.getElementById('kpi-ltv-sub').textContent = 'total lifetime spend';
+  document.getElementById('kpi-freq').textContent = avgFreq+'x';
+  document.getElementById('kpi-freq-sub').textContent = 'purchases per customer';
+  document.getElementById('kpi-recency').textContent = avgRec;
+  document.getElementById('kpi-recency-sub').textContent = 'days since last purchase';
+  document.getElementById('kpi-churn').textContent = churnCount.toLocaleString();
+  document.getElementById('kpi-churn-sub').textContent = 'At Risk + Churned customers';
+}
+
+// ── CHARTS ──
+function destroy(name){ if(charts[name]){ charts[name].destroy(); delete charts[name]; } }
+
+function updateSegBarChart() {
+  destroy('segBar');
+  const counts = SEGMENTS.map(s=>filteredData.filter(r=>r.segment===s).length);
+  charts.segBar = new Chart(document.getElementById('segBarChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:SEGMENTS, datasets:[{ data:counts, backgroundColor:SEGMENTS.map(s=>SEG_COLORS[s]), borderRadius:8, borderSkipped:false }] },
+    options:{ responsive:true, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.raw+' customers'}}},
+      scales:{ x:{grid:{display:false},ticks:{color:'#64748b'}}, y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#64748b'}} } }
+  });
+}
+
+function updateSegDonutChart() {
+  destroy('segDonut');
+  const counts = SEGMENTS.map(s=>filteredData.filter(r=>r.segment===s).length);
+  charts.segDonut = new Chart(document.getElementById('segDonutChart').getContext('2d'),{
+    type:'doughnut',
+    data:{ labels:SEGMENTS, datasets:[{ data:counts, backgroundColor:SEGMENTS.map(s=>SEG_COLORS[s]), borderWidth:0, hoverOffset:6 }] },
+    options:{ responsive:true, cutout:'65%',
+      plugins:{ legend:{position:'bottom', labels:{color:'#94a3b8',padding:10,boxWidth:10}}, tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw} customers`}} } }
+  });
+}
+
+function updateSpendChart() {
+  destroy('spend');
+  const avgs = SEGMENTS.map(s=>{
+    const d = filteredData.filter(r=>r.segment===s);
+    return d.length ? Math.round(d.reduce((a,r)=>a+r.ltv,0)/d.length) : 0;
+  });
+  charts.spend = new Chart(document.getElementById('spendChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:SEGMENTS, datasets:[{ data:avgs, backgroundColor:SEGMENTS.map(s=>SEG_COLORS[s]+'bb'), borderRadius:6, borderSkipped:false }] },
+    options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>'$'+c.raw.toLocaleString()}}},
+      scales:{ x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#64748b',callback:v=>'$'+v.toLocaleString()}}, y:{grid:{display:false},ticks:{color:'#64748b'}} } }
+  });
+}
+
+function updateRadarChart() {
+  destroy('radar');
+  const avgFreq = SEGMENTS.map(s=>{
+    const d = filteredData.filter(r=>r.segment===s);
+    return d.length ? parseFloat((d.reduce((a,r)=>a+r.frequency,0)/d.length).toFixed(1)) : 0;
+  });
+  charts.radar = new Chart(document.getElementById('radarChart').getContext('2d'),{
+    type:'radar',
+    data:{ labels:SEGMENTS, datasets:[{ label:'Avg Frequency', data:avgFreq,
+      borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.15)', pointBackgroundColor:'#a78bfa', borderWidth:2, pointRadius:4 }] },
+    options:{ responsive:true,
+      plugins:{ legend:{display:false} },
+      scales:{ r:{ grid:{color:'rgba(255,255,255,0.07)'}, pointLabels:{color:'#94a3b8',font:{size:11}}, ticks:{display:false}, angleLines:{color:'rgba(255,255,255,0.05)'} } } }
+  });
+}
+
+function updateAgeChart() {
+  destroy('age');
+  const groups = AGE_GROUPS;
+  const counts = groups.map(g=>filteredData.filter(r=>r.age===g).length);
+  charts.age = new Chart(document.getElementById('ageChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:groups, datasets:[{ data:counts, backgroundColor:['rgba(167,139,250,0.7)','rgba(52,211,153,0.7)','rgba(96,165,250,0.7)','rgba(251,146,60,0.7)'], borderRadius:6, borderSkipped:false }] },
+    options:{ responsive:true, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false},ticks:{color:'#64748b'}}, y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#64748b'}} } }
+  });
+}
+
+function updateCatChart() {
+  destroy('cat');
+  const byCat = {};
+  CATEGORIES.forEach(c=>byCat[c]=0);
+  filteredData.forEach(r=>{ byCat[r.category]=(byCat[r.category]||0)+1; });
+  const labels = Object.keys(byCat);
+  const vals = labels.map(l=>byCat[l]);
+  const colors = ['#a78bfa','#34d399','#60a5fa','#fb923c','#f43f5e','#fbbf24','#818cf8'];
+  charts.cat = new Chart(document.getElementById('catChart').getContext('2d'),{
+    type:'doughnut',
+    data:{ labels, datasets:[{ data:vals, backgroundColor:colors, borderWidth:0, hoverOffset:5 }] },
+    options:{ responsive:true, cutout:'60%',
+      plugins:{ legend:{position:'bottom', labels:{color:'#94a3b8',padding:8,boxWidth:9,font:{size:10}}}, tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw}`}} } }
+  });
+}
+
+// ── TABLE ──
+function rfmPips(r,f,m){
+  const pip = (val,col) => `<div class="rfm-pip" style="background:${col};opacity:${0.3+val*0.14}"></div>`;
+  return `<div class="rfm-bar-wrap" title="R:${r} F:${f} M:${m}">
+    ${pip(r,'#fb923c')}${pip(r,'#fb923c')}
+    ${pip(f,'#60a5fa')}${pip(f,'#60a5fa')}
+    ${pip(m,'#a78bfa')}${pip(m,'#a78bfa')}
+    <span style="font-size:10px;color:var(--muted);margin-left:4px">${r}${f}${m}</span>
+  </div>`;
+}
+
+function sortTable(key){ sortKey===key?sortAsc=!sortAsc:(sortKey=key,sortAsc=false); renderTable(); }
+
+function renderTable(){
+  const search = document.getElementById('search-box').value.toLowerCase();
+  let rows = filteredData.filter(r=>
+    r.name.toLowerCase().includes(search)||
+    r.region.toLowerCase().includes(search)||
+    r.segment.toLowerCase().includes(search)||
+    r.category.toLowerCase().includes(search)
+  );
+  rows.sort((a,b)=>{
+    let av=a[sortKey],bv=b[sortKey];
+    if(typeof av==='string') av=av.toLowerCase(),bv=bv.toLowerCase();
+    return sortAsc?(av>bv?1:-1):(av<bv?1:-1);
+  });
+  const shown = rows.slice(0,60);
+  document.getElementById('table-body').innerHTML = shown.map(r=>{
+    const col = SEG_COLORS[r.segment];
+    return `<tr>
+      <td style="color:var(--muted);font-size:11px">${r.id}</td>
+      <td style="font-weight:500">${r.name}</td>
+      <td><span class="badge" style="background:rgba(${hexToRgb(col)},0.12);color:${col}">${SEG_EMOJI[r.segment]} ${r.segment}</span></td>
+      <td style="color:var(--muted)">${r.age}</td>
+      <td style="color:var(--muted)">${r.gender}</td>
+      <td>${r.region}</td>
+      <td style="font-weight:600;color:var(--c2)">$${r.ltv.toLocaleString()}</td>
+      <td style="text-align:center">${r.frequency}x</td>
+      <td style="text-align:center;color:${r.recency>90?'var(--c5)':r.recency>30?'var(--c3)':'var(--c2)'}">${r.recency}d</td>
+      <td>${rfmPips(r.rfmR,r.rfmF,r.rfmM)}</td>
+      <td style="color:var(--muted)">${r.category}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('table-footer').textContent = `Showing ${shown.length} of ${rows.length} customers`;
+}
+
+// ── CSV IMPORT ──
+function handleFileUpload(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  Papa.parse(file,{ header:true, skipEmptyLines:true, complete: function(res){
+    const parsed = res.data.map((row,i)=>{
+      const get = (names)=>{ for(const n of names){ const k=Object.keys(row).find(k=>k.toLowerCase().trim()===n); if(k&&row[k]) return row[k]; } return null; };
+      const seg = get(['segment','cluster','group','type']) || pick(SEGMENTS);
+      const validSeg = SEGMENTS.includes(seg) ? seg : pick(SEGMENTS);
+      const rfm = rfmForSegment(validSeg);
+      return {
+        id: get(['id','customer id','cust id']) || 'C'+i,
+        name: get(['name','customer name','customer']) || 'Customer '+i,
+        segment: validSeg,
+        gender: get(['gender','sex']) || pick(GENDERS),
+        age: get(['age group','age_group','age']) || pick(AGE_GROUPS),
+        region: get(['region','area','location']) || pick(REGIONS),
+        ltv: parseFloat((get(['ltv','lifetime value','total spend','revenue'])||rfm.m)) || rfm.m,
+        frequency: parseInt(get(['frequency','purchases','orders'])||rfm.f) || rfm.f,
+        recency: parseInt(get(['recency','days since','last purchase'])||rfm.r) || rfm.r,
+        category: get(['category','preferred category','preference']) || pick(CATEGORIES),
+        rfmR: rfm.r<=15?5:rfm.r<=30?4:rfm.r<=60?3:rfm.r<=120?2:1,
+        rfmF: rfm.f>=20?5:rfm.f>=12?4:rfm.f>=7?3:rfm.f>=3?2:1,
+        rfmM: rfm.m>=15000?5:rfm.m>=7000?4:rfm.m>=3000?3:rfm.m>=1000?2:1,
+      };
+    });
+    rawData = parsed;
+    document.getElementById('data-source-label').textContent = `Showing: ${file.name} — ${parsed.length} customers`;
+    applyFilters();
+  }});
+}
+
+function updateAll(){
+  updateSegCards();
+  updateKPIs();
+  updateSegBarChart();
+  updateSegDonutChart();
+  updateSpendChart();
+  updateRadarChart();
+  updateAgeChart();
+  updateCatChart();
+  renderTable();
+}
+
+updateAll();
+</script>
+</body>
+</html>
