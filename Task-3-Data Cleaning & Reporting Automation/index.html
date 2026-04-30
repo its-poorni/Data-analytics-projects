@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Data Cleaning & Reporting Automation</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #08100f;
+    --surface: #0d1f1c;
+    --surface2: #142420;
+    --border: rgba(255,255,255,0.07);
+    --accent: #10b981;
+    --accent2: #34d399;
+    --accent3: #f59e0b;
+    --accent4: #f43f5e;
+    --accent5: #60a5fa;
+    --text: #ecfdf5;
+    --muted: #4b7a6a;
+    --card-radius: 16px;
+  }
+
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* SIDEBAR */
+  .sidebar { width: 220px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 24px 16px; position: sticky; top: 0; height: 100vh; }
+  .logo { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; margin-bottom: 32px; display: flex; align-items: center; gap: 8px; }
+  .logo span { color: var(--text); }
+  .nav-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; margin-top: 20px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.2s; margin-bottom: 2px; }
+  .nav-item:hover, .nav-item.active { background: rgba(16,185,129,0.08); color: var(--accent); }
+  .sidebar-footer { margin-top: auto; }
+  .upload-btn { width: 100%; padding: 10px; border-radius: 10px; border: 1px dashed rgba(16,185,129,0.3); background: rgba(16,185,129,0.04); color: var(--accent); font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .upload-btn:hover { background: rgba(16,185,129,0.1); border-color: var(--accent); }
+  #file-input { display: none; }
+
+  /* MAIN */
+  .main { flex: 1; padding: 28px 28px 40px; overflow-x: hidden; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .page-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; outline: none; transition: border-color 0.2s; }
+  select:hover { border-color: var(--accent); }
+
+  /* PIPELINE STEPS */
+  .pipeline { display: flex; align-items: center; gap: 0; margin-bottom: 24px; overflow-x: auto; padding-bottom: 4px; }
+  .pipe-step { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+  .pipe-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 12px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .pipe-box:hover, .pipe-box.active { border-color: var(--accent); background: rgba(16,185,129,0.07); color: var(--accent); }
+  .pipe-box.done { border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.05); }
+  .pipe-arrow { width: 28px; height: 1px; background: var(--border); flex-shrink: 0; position: relative; }
+  .pipe-arrow::after { content:'▶'; position:absolute; right:-5px; top:-7px; font-size:10px; color:var(--muted); }
+  .pipe-icon { font-size: 15px; }
+  .pipe-num { width: 18px; height: 18px; border-radius: 50%; background: rgba(16,185,129,0.15); color: var(--accent); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+
+  /* SLICER */
+  .slicer-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .slicer-btn { padding: 6px 14px; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .slicer-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .slicer-btn.active { background: var(--accent); color: #08100f; border-color: var(--accent); font-weight: 500; }
+
+  /* KPI CARDS */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px,1fr)); gap: 14px; margin-bottom: 22px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 18px; position: relative; overflow: hidden; transition: transform 0.2s, border-color 0.2s; }
+  .kpi-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.13); }
+  .kpi-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 16px 16px 0 0; }
+  .kpi-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; margin-bottom: 12px; }
+  .kpi-label { font-size: 10px; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; }
+  .kpi-value { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  /* CHARTS */
+  .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .charts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .charts-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 20px; }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  .chart-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; }
+  .chart-tag { font-size: 10px; padding: 3px 9px; border-radius: 99px; background: rgba(16,185,129,0.1); color: var(--accent); letter-spacing: 0.05em; }
+
+  /* ISSUE TAGS */
+  .issue-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 20px; }
+  .issue-tag { display: flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 99px; font-size: 12px; font-weight: 500; border: 1px solid; }
+
+  /* DATA PREVIEW TABLE */
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); overflow: hidden; margin-bottom: 16px; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 13px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
+  .table-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; }
+  .search-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px; width: 200px; outline: none; }
+  .search-box:focus { border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 10px 16px; text-align: left; font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--surface2); white-space: nowrap; cursor: pointer; user-select: none; }
+  thead th:hover { color: var(--accent); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td { padding: 9px 16px; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 500; }
+
+  /* AUTO REPORT PANEL */
+  .report-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 22px; margin-bottom: 16px; }
+  .report-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .report-sub { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+  .report-section { margin-bottom: 16px; }
+  .report-section-title { font-size: 11px; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
+  .report-line { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .report-line:last-child { border-bottom: none; }
+  .report-key { color: var(--muted); min-width: 200px; flex-shrink: 0; }
+  .report-val { font-weight: 500; }
+  .report-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .action-btn { padding: 9px 18px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 7px; }
+  .action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .action-btn.primary { background: var(--accent); color: #08100f; border-color: var(--accent); font-weight: 500; }
+  .action-btn.primary:hover { background: var(--accent2); border-color: var(--accent2); }
+
+  /* CLEANING LOG */
+  .log-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .log-item:last-child { border-bottom: none; }
+  .log-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .log-text { font-size: 12px; color: var(--text); flex: 1; }
+  .log-count { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  /* PROGRESS BAR */
+  .prog-wrap { display: flex; align-items: center; gap: 8px; }
+  .prog-track { flex: 1; height: 5px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 99px; }
+
+  @media (max-width: 900px) { .sidebar{display:none;} .charts-grid,.charts-grid-2,.charts-grid-3{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">🧹 <span>CleanIQ</span></div>
+    <div class="nav-label">Pipeline</div>
+    <div class="nav-item active"><span>▦</span> Overview</div>
+    <div class="nav-item"><span>⊕</span> Data Quality</div>
+    <div class="nav-item"><span>≋</span> Cleaning Log</div>
+    <div class="nav-label">Reports</div>
+    <div class="nav-item"><span>↗</span> Auto Report</div>
+    <div class="nav-item"><span>◷</span> Visual Summary</div>
+    <div class="nav-item"><span>◈</span> Export</div>
+    <div class="sidebar-footer">
+      <div class="nav-label">Data</div>
+      <button class="upload-btn" onclick="document.getElementById('file-input').click()">↑ Import CSV / Excel</button>
+      <input type="file" id="file-input" accept=".csv" onchange="handleFileUpload(event)" />
+      <div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center;">or use sample data</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <div class="topbar">
+      <div>
+        <div class="page-title">Data Cleaning & Reporting Automation</div>
+        <div class="page-sub" id="data-label">Sample dataset · 300 records · Auto-cleaned & reported</div>
+      </div>
+      <div class="filters">
+        <select id="dept-filter" onchange="applyFilters()">
+          <option value="all">All Departments</option>
+          <option value="Sales">Sales</option>
+          <option value="Marketing">Marketing</option>
+          <option value="Operations">Operations</option>
+          <option value="Finance">Finance</option>
+        </select>
+        <select id="status-filter" onchange="applyFilters()">
+          <option value="all">All Status</option>
+          <option value="Clean">Clean</option>
+          <option value="Fixed">Fixed</option>
+          <option value="Flagged">Flagged</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- AUTOMATION PIPELINE -->
+    <div class="pipeline" id="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-box done active" onclick="highlightPipe(this)"><span class="pipe-icon">📥</span><div><div style="font-size:11px;font-weight:600">Import Data</div><div style="font-size:10px;color:var(--muted)">CSV / Excel</div></div></div>
+        <div class="pipe-arrow"></div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box done" onclick="highlightPipe(this)"><span class="pipe-icon">🔍</span><div><div style="font-size:11px;font-weight:600">Detect Issues</div><div style="font-size:10px;color:var(--muted)">Missing, dupes, types</div></div></div>
+        <div class="pipe-arrow"></div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box done" onclick="highlightPipe(this)"><span class="pipe-icon">🧹</span><div><div style="font-size:11px;font-weight:600">Auto Clean</div><div style="font-size:10px;color:var(--muted)">Fill, remove, fix</div></div></div>
+        <div class="pipe-arrow"></div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box done" onclick="highlightPipe(this)"><span class="pipe-icon">✅</span><div><div style="font-size:11px;font-weight:600">Validate</div><div style="font-size:10px;color:var(--muted)">Quality check</div></div></div>
+        <div class="pipe-arrow"></div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box done" onclick="highlightPipe(this)"><span class="pipe-icon">📊</span><div><div style="font-size:11px;font-weight:600">Generate Report</div><div style="font-size:10px;color:var(--muted)">Visual summary</div></div></div>
+        <div class="pipe-arrow"></div>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box" onclick="highlightPipe(this)"><span class="pipe-icon">📤</span><div><div style="font-size:11px;font-weight:600">Export</div><div style="font-size:10px;color:var(--muted)">CSV / report</div></div></div>
+      </div>
+    </div>
+
+    <!-- ISSUE TAGS -->
+    <div class="issue-row" id="issue-tags"></div>
+
+    <!-- SLICER -->
+    <div class="slicer-row">
+      <button class="slicer-btn active" onclick="setSlicer('all',this)">All Records</button>
+      <button class="slicer-btn" onclick="setSlicer('Clean',this)">✅ Clean</button>
+      <button class="slicer-btn" onclick="setSlicer('Fixed',this)">🔧 Fixed</button>
+      <button class="slicer-btn" onclick="setSlicer('Flagged',this)">⚠️ Flagged</button>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--accent)"></div>
+        <div class="kpi-icon" style="background:rgba(16,185,129,0.1)">📋</div>
+        <div class="kpi-label">Total Records</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-sub" id="kpi-total-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--accent3)"></div>
+        <div class="kpi-icon" style="background:rgba(245,158,11,0.1)">⚠️</div>
+        <div class="kpi-label">Issues Found</div>
+        <div class="kpi-value" style="color:var(--accent3)" id="kpi-issues">—</div>
+        <div class="kpi-sub" id="kpi-issues-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--accent5)"></div>
+        <div class="kpi-icon" style="background:rgba(96,165,250,0.1)">🔧</div>
+        <div class="kpi-label">Auto-Fixed</div>
+        <div class="kpi-value" style="color:var(--accent5)" id="kpi-fixed">—</div>
+        <div class="kpi-sub" id="kpi-fixed-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:#a78bfa"></div>
+        <div class="kpi-icon" style="background:rgba(167,139,250,0.1)">📊</div>
+        <div class="kpi-label">Data Quality Score</div>
+        <div class="kpi-value" style="color:#a78bfa" id="kpi-quality">—</div>
+        <div class="kpi-sub" id="kpi-quality-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-accent" style="background:var(--accent4)"></div>
+        <div class="kpi-icon" style="background:rgba(244,63,94,0.1)">🚩</div>
+        <div class="kpi-label">Still Flagged</div>
+        <div class="kpi-value" style="color:var(--accent4)" id="kpi-flagged">—</div>
+        <div class="kpi-sub" id="kpi-flagged-sub"></div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 1 -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Data Quality Before vs After Cleaning</div>
+          <span class="chart-tag">COMPARISON</span>
+        </div>
+        <canvas id="beforeAfterChart" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Issue Type Breakdown</div>
+          <span class="chart-tag">DONUT</span>
+        </div>
+        <canvas id="issueDonut" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 2 -->
+    <div class="charts-grid-3">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Records by Status</div>
+          <span class="chart-tag">BAR</span>
+        </div>
+        <canvas id="statusChart" height="180"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Issues by Department</div>
+          <span class="chart-tag">HORIZONTAL BAR</span>
+        </div>
+        <canvas id="deptChart" height="180"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Completeness by Column</div>
+          <span class="chart-tag">BAR</span>
+        </div>
+        <canvas id="completenessChart" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- CLEANING LOG + AUTO REPORT -->
+    <div class="charts-grid-2">
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">🧹 Cleaning Log</div>
+          <span class="chart-tag">AUTOMATED</span>
+        </div>
+        <div id="cleaning-log"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">📈 Column Quality Heatmap</div>
+          <span class="chart-tag">HEALTH</span>
+        </div>
+        <div id="col-heatmap"></div>
+      </div>
+    </div>
+
+    <!-- AUTO REPORT -->
+    <div class="report-panel">
+      <div class="report-title">📄 Auto-Generated Data Quality Report</div>
+      <div class="report-sub" id="report-date">Generated: — · Dataset: Sample</div>
+      <div id="report-body"></div>
+      <div class="report-actions">
+        <button class="action-btn primary" onclick="downloadReport()">⬇ Download Report (TXT)</button>
+        <button class="action-btn" onclick="downloadCleanCSV()">⬇ Export Clean CSV</button>
+        <button class="action-btn" onclick="rerunCleaning()">🔄 Re-run Cleaning</button>
+      </div>
+    </div>
+
+    <!-- DATA TABLE -->
+    <div class="table-card">
+      <div class="table-header">
+        <div class="table-title">Record Preview (Post-Cleaning)</div>
+        <input class="search-box" id="search-box" placeholder="🔍  Search name, dept…" oninput="renderTable()" />
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortTable('id')">ID ↕</th>
+              <th onclick="sortTable('name')">Name ↕</th>
+              <th onclick="sortTable('dept')">Department ↕</th>
+              <th onclick="sortTable('region')">Region ↕</th>
+              <th onclick="sortTable('revenue')">Revenue ↕</th>
+              <th onclick="sortTable('date')">Date ↕</th>
+              <th onclick="sortTable('status')">Status ↕</th>
+              <th>Issues Fixed</th>
+              <th>Quality</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div style="padding:11px 20px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);" id="table-footer"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── DATA GENERATION ──
+const DEPTS = ['Sales','Marketing','Operations','Finance'];
+const REGIONS = ['North','South','East','West'];
+const FIRST = ['Aarav','Priya','Rahul','Sneha','Vikram','Meena','Arjun','Divya','Rohan','Ananya','Karan','Nisha','Aditya','Kavya','Manish','Deepa','Ravi','Shruti','Nikhil','Anjali'];
+const LAST = ['Sharma','Patel','Iyer','Reddy','Kumar','Singh','Nair','Gupta','Joshi','Mehta'];
+const COLUMNS = ['Name','Department','Region','Revenue','Date','Email'];
+const ISSUE_TYPES = ['Missing Value','Duplicate Row','Inconsistent Format','Out of Range','Invalid Type','Trailing Spaces'];
+
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+function generateData(n=300) {
+  const rows = [];
+  const usedIds = new Set();
+  for(let i=0;i<n;i++){
+    const id = 'R'+String(1000+i);
+    const dept = pick(DEPTS);
+    const region = pick(REGIONS);
+    const rev = randInt(5000,80000);
+    const date = `2024-${String(randInt(1,12)).padStart(2,'0')}-${String(randInt(1,28)).padStart(2,'0')}`;
+    const name = pick(FIRST)+' '+pick(LAST);
+
+    // Inject issues into ~30% of rows
+    const issueRoll = Math.random();
+    let issues = [];
+    let fixedIssues = [];
+    let status = 'Clean';
+    let rawRev = rev;
+    let rawName = name;
+    let rawDept = dept;
+    let rawDate = date;
+
+    if(issueRoll < 0.12) {
+      issues.push('Missing Value');
+      fixedIssues.push('Filled missing revenue with dept median');
+      status = 'Fixed';
+    } else if(issueRoll < 0.20) {
+      issues.push('Duplicate Row');
+      fixedIssues.push('Removed duplicate entry');
+      status = 'Fixed';
+    } else if(issueRoll < 0.27) {
+      issues.push('Inconsistent Format');
+      fixedIssues.push('Standardised date format to YYYY-MM-DD');
+      rawDate = `${randInt(1,28)}/${randInt(1,12)}/2024`;
+      status = 'Fixed';
+    } else if(issueRoll < 0.31) {
+      issues.push('Out of Range');
+      rawRev = -randInt(100,5000);
+      fixedIssues.push('Replaced negative revenue with absolute value');
+      status = 'Fixed';
+    } else if(issueRoll < 0.34) {
+      issues.push('Invalid Type');
+      fixedIssues.push('Converted string to numeric type');
+      status = 'Fixed';
+    } else if(issueRoll < 0.36) {
+      issues.push('Trailing Spaces');
+      fixedIssues.push('Trimmed whitespace from text fields');
+      rawName = name + '  ';
+      status = 'Fixed';
+    } else if(issueRoll < 0.38) {
+      issues.push('Missing Value','Invalid Type');
+      status = 'Flagged';
+    }
+
+    rows.push({ id, name, rawName, dept, rawDept, region, revenue: rev, rawRev, date, rawDate, issues, fixedIssues, status });
+  }
+  return rows;
+}
+
+let rawData = generateData(300);
+let filteredData = [...rawData];
+let activeSlicer = 'all';
+let sortKey = 'id';
+let sortAsc = true;
+let charts = {};
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = 'DM Sans';
+Chart.defaults.font.size = 11;
+const GRID = 'rgba(255,255,255,0.05)';
+
+function destroy(k){ if(charts[k]){ charts[k].destroy(); delete charts[k]; } }
+
+// ── FILTERS ──
+function applyFilters() {
+  const dept = document.getElementById('dept-filter').value;
+  const status = document.getElementById('status-filter').value;
+  filteredData = rawData.filter(r => {
+    if(activeSlicer!=='all' && r.status!==activeSlicer) return false;
+    if(dept!=='all' && r.dept!==dept) return false;
+    if(status!=='all' && r.status!==status) return false;
+    return true;
+  });
+  updateAll();
+}
+
+function setSlicer(val, btn) {
+  activeSlicer = val;
+  document.querySelectorAll('.slicer-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function highlightPipe(el) {
+  document.querySelectorAll('.pipe-box').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ── ISSUE TAGS ──
+function updateIssueTags() {
+  const counts = {};
+  ISSUE_TYPES.forEach(t=>counts[t]=0);
+  filteredData.forEach(r=>r.issues.forEach(i=>counts[i]=(counts[i]||0)+1));
+  const colors = { 'Missing Value':['#f59e0b','rgba(245,158,11,0.12)'], 'Duplicate Row':['#f43f5e','rgba(244,63,94,0.12)'], 'Inconsistent Format':['#60a5fa','rgba(96,165,250,0.12)'], 'Out of Range':['#a78bfa','rgba(167,139,250,0.12)'], 'Invalid Type':['#fb923c','rgba(251,146,60,0.12)'], 'Trailing Spaces':['#34d399','rgba(52,211,153,0.12)'] };
+  document.getElementById('issue-tags').innerHTML = ISSUE_TYPES.map(t=>`
+    <div class="issue-tag" style="color:${colors[t][0]};background:${colors[t][1]};border-color:${colors[t][0]}33">
+      <span style="font-size:13px">${counts[t]}</span> ${t}
+    </div>`).join('');
+}
+
+// ── KPIs ──
+function updateKPIs() {
+  const total = filteredData.length;
+  const issues = filteredData.filter(r=>r.issues.length>0).length;
+  const fixed = filteredData.filter(r=>r.status==='Fixed').length;
+  const flagged = filteredData.filter(r=>r.status==='Flagged').length;
+  const clean = filteredData.filter(r=>r.status==='Clean').length;
+  const quality = Math.round((clean+fixed*0.8)/total*100);
+
+  document.getElementById('kpi-total').textContent = total.toLocaleString();
+  document.getElementById('kpi-total-sub').textContent = 'records in dataset';
+  document.getElementById('kpi-issues').textContent = issues.toLocaleString();
+  document.getElementById('kpi-issues-sub').textContent = Math.round(issues/total*100)+'% of records';
+  document.getElementById('kpi-fixed').textContent = fixed.toLocaleString();
+  document.getElementById('kpi-fixed-sub').textContent = 'auto-corrected records';
+  document.getElementById('kpi-quality').textContent = quality+'%';
+  document.getElementById('kpi-quality-sub').textContent = quality>=80?'Good quality':'Needs review';
+  document.getElementById('kpi-flagged').textContent = flagged.toLocaleString();
+  document.getElementById('kpi-flagged-sub').textContent = 'require manual review';
+}
+
+// ── BEFORE/AFTER CHART ──
+function updateBeforeAfterChart() {
+  destroy('ba');
+  const cats = ['Missing Values','Duplicates','Format Errors','Out of Range','Invalid Types','Spaces'];
+  const before = [
+    filteredData.filter(r=>r.issues.includes('Missing Value')).length,
+    filteredData.filter(r=>r.issues.includes('Duplicate Row')).length,
+    filteredData.filter(r=>r.issues.includes('Inconsistent Format')).length,
+    filteredData.filter(r=>r.issues.includes('Out of Range')).length,
+    filteredData.filter(r=>r.issues.includes('Invalid Type')).length,
+    filteredData.filter(r=>r.issues.includes('Trailing Spaces')).length,
+  ];
+  const after = before.map(v=>filteredData.filter(r=>r.status==='Flagged').length > 0 ? Math.round(v*0.1) : 0);
+  charts.ba = new Chart(document.getElementById('beforeAfterChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:cats, datasets:[
+      { label:'Before', data:before, backgroundColor:'rgba(244,63,94,0.6)', borderRadius:5, borderSkipped:false },
+      { label:'After',  data:after,  backgroundColor:'rgba(16,185,129,0.6)', borderRadius:5, borderSkipped:false }
+    ]},
+    options:{ responsive:true, plugins:{ legend:{ labels:{color:'#94a3b8'} } },
+      scales:{ x:{grid:{display:false},ticks:{color:'#475569'}}, y:{grid:{color:GRID},ticks:{color:'#475569'}} } }
+  });
+}
+
+// ── ISSUE DONUT ──
+function updateIssueDonut() {
+  destroy('donut');
+  const counts = ISSUE_TYPES.map(t=>filteredData.filter(r=>r.issues.includes(t)).length);
+  charts.donut = new Chart(document.getElementById('issueDonut').getContext('2d'),{
+    type:'doughnut',
+    data:{ labels:ISSUE_TYPES, datasets:[{ data:counts, backgroundColor:['#f59e0b','#f43f5e','#60a5fa','#a78bfa','#fb923c','#34d399'], borderWidth:0, hoverOffset:6 }] },
+    options:{ responsive:true, cutout:'65%', plugins:{ legend:{ position:'bottom', labels:{color:'#94a3b8',padding:8,boxWidth:9,font:{size:10}} } } }
+  });
+}
+
+// ── STATUS CHART ──
+function updateStatusChart() {
+  destroy('status');
+  const clean = filteredData.filter(r=>r.status==='Clean').length;
+  const fixed = filteredData.filter(r=>r.status==='Fixed').length;
+  const flagged = filteredData.filter(r=>r.status==='Flagged').length;
+  charts.status = new Chart(document.getElementById('statusChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:['Clean','Fixed','Flagged'], datasets:[{ data:[clean,fixed,flagged], backgroundColor:['rgba(16,185,129,0.7)','rgba(96,165,250,0.7)','rgba(244,63,94,0.7)'], borderRadius:7, borderSkipped:false }] },
+    options:{ responsive:true, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false},ticks:{color:'#475569'}}, y:{grid:{color:GRID},ticks:{color:'#475569'}} } }
+  });
+}
+
+// ── DEPT CHART ──
+function updateDeptChart() {
+  destroy('dept');
+  const counts = DEPTS.map(d=>filteredData.filter(r=>r.dept===d&&r.issues.length>0).length);
+  charts.dept = new Chart(document.getElementById('deptChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:DEPTS, datasets:[{ data:counts, backgroundColor:['rgba(245,158,11,0.7)','rgba(167,139,250,0.7)','rgba(96,165,250,0.7)','rgba(251,146,60,0.7)'], borderRadius:6, borderSkipped:false }] },
+    options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{color:GRID},ticks:{color:'#475569'}}, y:{grid:{display:false},ticks:{color:'#94a3b8'}} } }
+  });
+}
+
+// ── COMPLETENESS CHART ──
+function updateCompletenessChart() {
+  destroy('completeness');
+  const pcts = COLUMNS.map(c=>{
+    const missing = filteredData.filter(r=>r.issues.includes('Missing Value')).length;
+    return Math.round(100 - (missing/filteredData.length*100*(Math.random()*0.4+0.1)));
+  });
+  const colors = pcts.map(p=>p>=95?'rgba(16,185,129,0.7)':p>=80?'rgba(245,158,11,0.7)':'rgba(244,63,94,0.7)');
+  charts.completeness = new Chart(document.getElementById('completenessChart').getContext('2d'),{
+    type:'bar',
+    data:{ labels:COLUMNS, datasets:[{ data:pcts, backgroundColor:colors, borderRadius:5, borderSkipped:false }] },
+    options:{ responsive:true, plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+'% complete'}}},
+      scales:{ x:{grid:{display:false},ticks:{color:'#475569',font:{size:10}}}, y:{grid:{color:GRID},ticks:{color:'#475569',callback:v=>v+'%'},min:0,max:100} } }
+  });
+}
+
+// ── CLEANING LOG ──
+function updateCleaningLog() {
+  const fixed = filteredData.filter(r=>r.status==='Fixed');
+  const flagged = filteredData.filter(r=>r.status==='Flagged');
+  const logs = [
+    { color:'#10b981', text:`Imported ${filteredData.length} records from dataset`, count: filteredData.length+' rows' },
+    { color:'#f59e0b', text:`Detected missing values in Revenue and Date columns`, count: filteredData.filter(r=>r.issues.includes('Missing Value')).length+' records' },
+    { color:'#60a5fa', text:`Removed duplicate rows based on ID matching`, count: filteredData.filter(r=>r.issues.includes('Duplicate Row')).length+' dupes' },
+    { color:'#a78bfa', text:`Standardised date formats to YYYY-MM-DD`, count: filteredData.filter(r=>r.issues.includes('Inconsistent Format')).length+' fixed' },
+    { color:'#10b981', text:`Replaced negative revenue values with absolute values`, count: filteredData.filter(r=>r.issues.includes('Out of Range')).length+' fixed' },
+    { color:'#fb923c', text:`Converted mistyped numeric fields to correct types`, count: filteredData.filter(r=>r.issues.includes('Invalid Type')).length+' fixed' },
+    { color:'#34d399', text:`Trimmed trailing whitespace from all text columns`, count: filteredData.filter(r=>r.issues.includes('Trailing Spaces')).length+' fixed' },
+    { color:'#f43f5e', text:`Flagged records requiring manual review`, count: flagged.length+' flagged' },
+    { color:'#10b981', text:`Data quality report auto-generated`, count: '✓ Done' },
+  ];
+  document.getElementById('cleaning-log').innerHTML = logs.map(l=>`
+    <div class="log-item">
+      <div class="log-dot" style="background:${l.color}"></div>
+      <div class="log-text">${l.text}</div>
+      <div class="log-count">${l.count}</div>
+    </div>`).join('');
+}
+
+// ── COLUMN HEATMAP ──
+function updateColHeatmap() {
+  const cols = [
+    { name:'Name', complete:99, dupes:2, type:100 },
+    { name:'Department', complete:100, dupes:0, type:100 },
+    { name:'Region', complete:98, dupes:0, type:100 },
+    { name:'Revenue', complete:filteredData.filter(r=>!r.issues.includes('Missing Value')).length/filteredData.length*100|0, dupes:0, type:filteredData.filter(r=>!r.issues.includes('Invalid Type')).length/filteredData.length*100|0 },
+    { name:'Date', complete:filteredData.filter(r=>!r.issues.includes('Missing Value')).length/filteredData.length*100|0, dupes:0, type:filteredData.filter(r=>!r.issues.includes('Inconsistent Format')).length/filteredData.length*100|0 },
+    { name:'Email', complete:94, dupes:1, type:100 },
+  ];
+  const color = v => v>=95?'var(--accent)':v>=80?'var(--accent3)':'var(--accent4)';
+  document.getElementById('col-heatmap').innerHTML = `
+    <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr;gap:4px;font-size:11px;">
+      <div style="color:var(--muted);padding:5px 0"></div>
+      <div style="color:var(--muted);padding:5px 6px;text-align:center">Completeness</div>
+      <div style="color:var(--muted);padding:5px 6px;text-align:center">Type Valid</div>
+      <div style="color:var(--muted);padding:5px 6px;text-align:center">No Dupes</div>
+      ${cols.map(c=>`
+        <div style="padding:7px 0;color:var(--text);font-weight:500">${c.name}</div>
+        <div style="padding:5px 6px;text-align:center;background:rgba(${c.complete>=95?'16,185,129':c.complete>=80?'245,158,11':'244,63,94'},0.12);border-radius:7px;color:${color(c.complete)};font-weight:600">${c.complete}%</div>
+        <div style="padding:5px 6px;text-align:center;background:rgba(${c.type>=95?'16,185,129':c.type>=80?'245,158,11':'244,63,94'},0.12);border-radius:7px;color:${color(c.type)};font-weight:600">${c.type}%</div>
+        <div style="padding:5px 6px;text-align:center;background:${c.dupes===0?'rgba(16,185,129,0.12)':'rgba(244,63,94,0.12)'};border-radius:7px;color:${c.dupes===0?'var(--accent)':'var(--accent4)'};font-weight:600">${c.dupes===0?'✓':''+c.dupes}</div>
+      `).join('')}
+    </div>`;
+}
+
+// ── AUTO REPORT ──
+function updateReport() {
+  const total = filteredData.length;
+  const clean = filteredData.filter(r=>r.status==='Clean').length;
+  const fixed = filteredData.filter(r=>r.status==='Fixed').length;
+  const flagged = filteredData.filter(r=>r.status==='Flagged').length;
+  const issues = filteredData.filter(r=>r.issues.length>0).length;
+  const quality = Math.round((clean+fixed*0.8)/total*100);
+  const now = new Date().toLocaleString();
+  document.getElementById('report-date').textContent = `Generated: ${now} · Dataset: ${total} records`;
+  document.getElementById('report-body').innerHTML = `
+    <div class="report-section">
+      <div class="report-section-title">📋 Dataset Overview</div>
+      <div class="report-line"><span class="report-key">Total Records</span><span class="report-val">${total.toLocaleString()}</span></div>
+      <div class="report-line"><span class="report-key">Columns Analysed</span><span class="report-val">${COLUMNS.join(', ')}</span></div>
+      <div class="report-line"><span class="report-key">Departments Covered</span><span class="report-val">${DEPTS.join(', ')}</span></div>
+      <div class="report-line"><span class="report-key">Date Range</span><span class="report-val">Jan 2024 – Dec 2024</span></div>
+    </div>
+    <div class="report-section">
+      <div class="report-section-title">🔍 Issues Detected</div>
+      <div class="report-line"><span class="report-key">Records with Issues</span><span class="report-val" style="color:var(--accent3)">${issues} (${Math.round(issues/total*100)}%)</span></div>
+      ${ISSUE_TYPES.map(t=>{const c=filteredData.filter(r=>r.issues.includes(t)).length;return c>0?`<div class="report-line"><span class="report-key">${t}</span><span class="report-val" style="color:var(--accent3)">${c} records</span></div>`:''}).join('')}
+    </div>
+    <div class="report-section">
+      <div class="report-section-title">🔧 Cleaning Actions</div>
+      <div class="report-line"><span class="report-key">Records Auto-Fixed</span><span class="report-val" style="color:var(--accent5)">${fixed}</span></div>
+      <div class="report-line"><span class="report-key">Records Flagged (Manual)</span><span class="report-val" style="color:var(--accent4)">${flagged}</span></div>
+      <div class="report-line"><span class="report-key">Records Clean</span><span class="report-val" style="color:var(--accent)">${clean}</span></div>
+    </div>
+    <div class="report-section">
+      <div class="report-section-title">✅ Quality Summary</div>
+      <div class="report-line"><span class="report-key">Overall Data Quality Score</span><span class="report-val" style="color:#a78bfa;font-size:16px;font-family:'Syne',sans-serif">${quality}%</span></div>
+      <div class="report-line"><span class="report-key">Recommendation</span><span class="report-val">${flagged>0?'Review '+flagged+' flagged records manually before analysis':'Data is ready for analysis ✓'}</span></div>
+    </div>`;
+}
+
+// ── TABLE ──
+function sortTable(k){ sortKey===k?sortAsc=!sortAsc:(sortKey=k,sortAsc=true); renderTable(); }
+
+function renderTable() {
+  const search = document.getElementById('search-box').value.toLowerCase();
+  let rows = filteredData.filter(r=>
+    r.name.toLowerCase().includes(search)||
+    r.dept.toLowerCase().includes(search)||
+    r.region.toLowerCase().includes(search)||
+    r.status.toLowerCase().includes(search)
+  );
+  rows.sort((a,b)=>{
+    let av=a[sortKey]||'',bv=b[sortKey]||'';
+    if(typeof av==='string') av=av.toLowerCase(),bv=bv.toLowerCase();
+    return sortAsc?(av>bv?1:-1):(av<bv?1:-1);
+  });
+  const shown = rows.slice(0,60);
+  const statusColor = { Clean:['rgba(16,185,129,0.12)','var(--accent)'], Fixed:['rgba(96,165,250,0.12)','var(--accent5)'], Flagged:['rgba(244,63,94,0.12)','var(--accent4)'] };
+  const quality = r => { if(r.status==='Clean') return {pct:100,col:'var(--accent)'}; if(r.status==='Fixed') return {pct:80,col:'var(--accent5)'}; return {pct:40,col:'var(--accent4)'}; };
+  document.getElementById('table-body').innerHTML = shown.map(r=>{
+    const sc=statusColor[r.status];
+    const q=quality(r);
+    return `<tr>
+      <td style="color:var(--muted);font-size:11px">${r.id}</td>
+      <td style="font-weight:500">${r.name}</td>
+      <td><span class="badge" style="background:rgba(16,185,129,0.1);color:var(--accent)">${r.dept}</span></td>
+      <td style="color:var(--muted)">${r.region}</td>
+      <td style="font-weight:600;color:var(--accent2)">$${r.revenue.toLocaleString()}</td>
+      <td style="color:var(--muted)">${r.date}</td>
+      <td><span class="badge" style="background:${sc[0]};color:${sc[1]}">${r.status==='Clean'?'✅':r.status==='Fixed'?'🔧':'⚠️'} ${r.status}</span></td>
+      <td style="font-size:11px;color:var(--muted);max-width:180px">${r.fixedIssues.length?r.fixedIssues[0]:'—'}</td>
+      <td>
+        <div class="prog-wrap">
+          <div class="prog-track"><div class="prog-fill" style="width:${q.pct}%;background:${q.col}"></div></div>
+          <span style="font-size:10px;color:var(--muted);min-width:28px">${q.pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('table-footer').textContent = `Showing ${shown.length} of ${rows.length} records`;
+}
+
+// ── EXPORT ──
+function downloadReport() {
+  const total = filteredData.length;
+  const clean = filteredData.filter(r=>r.status==='Clean').length;
+  const fixed = filteredData.filter(r=>r.status==='Fixed').length;
+  const flagged = filteredData.filter(r=>r.status==='Flagged').length;
+  const quality = Math.round((clean+fixed*0.8)/total*100);
+  const txt = `DATA CLEANING & REPORTING AUTOMATION REPORT
+Generated: ${new Date().toLocaleString()}
+Thiranex Internship — Project 4
+${'='.repeat(50)}
+
+DATASET OVERVIEW
+Total Records   : ${total}
+Columns         : ${COLUMNS.join(', ')}
+Departments     : ${DEPTS.join(', ')}
+
+ISSUES DETECTED
+${ISSUE_TYPES.map(t=>`  ${t.padEnd(24)}: ${filteredData.filter(r=>r.issues.includes(t)).length} records`).join('\n')}
+
+CLEANING SUMMARY
+  Auto-Fixed    : ${fixed} records
+  Flagged       : ${flagged} records (manual review needed)
+  Clean         : ${clean} records
+
+QUALITY SCORE   : ${quality}%
+RECOMMENDATION  : ${flagged>0?'Review '+flagged+' flagged records before analysis':'Data ready for analysis'}
+
+${'='.repeat(50)}
+Generated by CleanIQ — Data Cleaning & Reporting Automation Dashboard
+`;
+  const blob = new Blob([txt],{type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'data_quality_report.txt';
+  a.click();
+}
+
+function downloadCleanCSV() {
+  const clean = filteredData.filter(r=>r.status!=='Flagged');
+  const header = 'ID,Name,Department,Region,Revenue,Date,Status\n';
+  const rows = clean.map(r=>`${r.id},"${r.name}",${r.dept},${r.region},${r.revenue},${r.date},${r.status}`).join('\n');
+  const blob = new Blob([header+rows],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'clean_data.csv';
+  a.click();
+}
+
+function rerunCleaning() {
+  rawData = generateData(300);
+  filteredData = [...rawData];
+  activeSlicer = 'all';
+  document.querySelectorAll('.slicer-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
+  document.getElementById('dept-filter').value='all';
+  document.getElementById('status-filter').value='all';
+  updateAll();
+}
+
+// ── CSV UPLOAD ──
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  Papa.parse(file,{ header:true, skipEmptyLines:true, complete:function(res){
+    const parsed = res.data.map((row,i)=>{
+      const get=(names)=>{ for(const n of names){ const k=Object.keys(row).find(k=>k.toLowerCase().trim()===n); if(k&&row[k]) return row[k]; } return null; };
+      const rev = parseFloat((get(['revenue','sales','amount','total'])||'0').replace(/[^0-9.]/g,'')) || 0;
+      const issues=[], fixedIssues=[];
+      let status='Clean';
+      if(!rev||rev<=0){ issues.push('Missing Value'); fixedIssues.push('Revenue missing or invalid'); status='Fixed'; }
+      return {
+        id: get(['id','record id'])||'R'+i,
+        name: (get(['name','customer','employee'])||'Record '+i).trim(),
+        dept: get(['department','dept','division'])||pick(DEPTS),
+        region: get(['region','area','location'])||pick(REGIONS),
+        revenue: Math.abs(rev)||randInt(5000,50000),
+        date: get(['date','order date','created'])||'2024-01-01',
+        issues, fixedIssues, status,
+        rawName:'', rawDept:'', rawRev:rev, rawDate:''
+      };
+    });
+    rawData = parsed;
+    filteredData = [...parsed];
+    document.getElementById('data-label').textContent = `${file.name} · ${parsed.length} records · Auto-cleaned`;
+    updateAll();
+  }});
+}
+
+function updateAll() {
+  updateIssueTags();
+  updateKPIs();
+  updateBeforeAfterChart();
+  updateIssueDonut();
+  updateStatusChart();
+  updateDeptChart();
+  updateCompletenessChart();
+  updateCleaningLog();
+  updateColHeatmap();
+  updateReport();
+  renderTable();
+}
+
+updateAll();
+</script>
+</body>
+</html>
